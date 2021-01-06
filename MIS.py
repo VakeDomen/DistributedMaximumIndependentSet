@@ -2,8 +2,26 @@ import time
 import numpy as np
 import multiprocessing
 from multiprocessing import Pipe, Lock
+import multiprocessing.pool
 
 ADJ_MATRIX_FILE = 'graph1.txt'
+
+class NoDaemonProcess(multiprocessing.Process):
+    @property
+    def daemon(self):
+        return False
+
+    @daemon.setter
+    def daemon(self, value):
+        pass
+
+class NoDaemonContext(type(multiprocessing.get_context())):
+    Process = NoDaemonProcess
+
+class NestablePool(multiprocessing.pool.Pool):
+    def __init__(self, *args, **kwargs):
+        kwargs['context'] = NoDaemonContext()
+        super(NestablePool, self).__init__(*args, **kwargs)
 
 class Graph:
     def __init__(self, adj_mat):
@@ -17,10 +35,10 @@ class Graph:
 
     def calc_degrees(self):
         return multiprocessing.Pool().map(self.calc_degree, range(len(self.adj_mat[0])))
-    
+
     def calc_degree(self, vertex):
         return sum(self.adj_mat[vertex])
-    
+
     def connect_nodes(self):
         for i in range(len(self.adj_mat[0])):
             self.connect_node(self.V[i])
@@ -36,6 +54,7 @@ class Node:
         self.id = id
         self.MIS = False
         self.used = False
+        self.selected = False
         self.degree = degree
         self.neighbours = {}
 
@@ -47,9 +66,27 @@ class Node:
 
     def connect(self, node):
         conn1, conn2 = Pipe()
-        if node.set_neighbour(self.id, input):
+        if node.set_neighbour(self.id, conn2):
             self.set_neighbour(node.id, conn1)
-        
+
+    def inform_neighbours(self, msg):
+        packages = [(key, msg) for key in self.neighbours.keys()]
+        multiprocessing.Pool().map(self.inform_neighbour, packages)
+
+    def inform_neighbour(self, payload):
+        self.neighbours.get(payload[0]).send((self.id, payload[1]))
+
+    def check_for_messages(self):
+        return multiprocessing.Pool().map(self.check_neighbour_message, self.neighbours.keys())
+
+    def check_neighbour_message(self, neighbour_id):
+        return self.neighbours.get(neighbour_id).recv()
+
+def work(node):
+    node.inform_neighbours("blabla message")
+    messages = node.check_for_messages()
+    print('me: ' + str(node.id) + ' | messages: ' + str(messages))
+    return node.id
 
 def string_to_matrix(source):
     lines = source.split('\n')
@@ -64,13 +101,10 @@ def get_adj_matrix():
     return string_to_matrix(s)
 
 def preporcess():
-    graph = Graph(get_adj_matrix())
-    return graph
+    return Graph(get_adj_matrix())
 
 def slowMIS(graph):
-    
-    return
-
+    return NestablePool().map(work, graph.V)
 
 def main():
     print("Preprocessing...")
@@ -79,11 +113,14 @@ def main():
     mid_time = time.time()
     print("Preprocessing finished in %s seconds!" % (mid_time - start_time))
     print("Calculating MIS...")
-    slowMIS(graph)
+    result = slowMIS(graph)
     end_time = time.time()
     print("Calculating MIS finished in %s seconds!" % (end_time - mid_time))
     print("--- Total execution: %s seconds ---" % (end_time - start_time))
+    print("Result: " + str(result))
 
 
 if __name__ == "__main__":
     main()
+
+
