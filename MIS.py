@@ -1,7 +1,7 @@
 import time
 import numpy as np
 import multiprocessing
-from multiprocessing import Pipe
+from multiprocessing import Pipe, Lock
 
 ADJ_MATRIX_FILE = 'graph1.txt'
 
@@ -22,7 +22,8 @@ class Graph:
         return sum(self.adj_mat[vertex])
     
     def connect_nodes(self):
-        multiprocessing.Pool().map(self.connect_node, self.V)
+        for i in range(len(self.adj_mat[0])):
+            self.connect_node(self.V[i])
 
     def connect_node(self, node):
         neighbour_indexes = np.nonzero(self.adj_mat[node.id])[0]
@@ -39,25 +40,22 @@ class Node:
         self.neighbours = {}
 
     def set_neighbour(self, neighbour_id, pipe):
-        self.neighbours[neighbour_id] = pipe
+        if not neighbour_id in self.neighbours:
+            self.neighbours[neighbour_id] = pipe
+            return True
+        return False
 
     def connect(self, node):
         conn1, conn2 = Pipe()
-        self.set_neighbour(node.id, conn1)
-        node.set_neighbour(self.id, input)
+        if node.set_neighbour(self.id, input):
+            self.set_neighbour(node.id, conn1)
         
 
-
-
-
-
 def string_to_matrix(source):
-    print("\tParsing matrix...")
     lines = source.split('\n')
     return [list(map(int, line.split(','))) for line in lines]
 
 def read_file(file):
-    print("\tReading adjeciency matrix file...")
     with open(file) as f: s = f.read()
     return s
 
@@ -85,7 +83,6 @@ def main():
     end_time = time.time()
     print("Calculating MIS finished in %s seconds!" % (end_time - mid_time))
     print("--- Total execution: %s seconds ---" % (end_time - start_time))
-    print(graph.V)
 
 
 if __name__ == "__main__":
