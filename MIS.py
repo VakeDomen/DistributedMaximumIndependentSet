@@ -62,6 +62,10 @@ class Node:
             self.neighbours[neighbour_id] = pipe
             return True
         return False
+    
+    def unset_neighbour(self, neighbour_id):
+        self.neighbours.pop(neighbour_id)
+        self.degree -= 1
 
     def connect(self, node):
         conn1, conn2 = Pipe()
@@ -82,13 +86,12 @@ class Node:
         return self.neighbours.get(neighbour_id).recv()
 
     def delete_neighbours(self, neighbours_to_del):
-        neighbours = multiprocessing.Pool().map(self.delete_neighbour, neighbours_to_del)
-        self.neighbours = dict([n for n in neighbours if n] )
+        for neighbour in neighbours_to_del: 
+            self.delete_neighbour(neighbour)
 
     def delete_neighbour(self, neighbour_to_del):
         if neighbour_to_del[1] == True:
-            return None
-        return (neighbour_to_del[0], self.neighbours[neighbour_to_del[0]])
+            return self.unset_neighbour(neighbour_to_del[0])
 
 
 def work(node):
