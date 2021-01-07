@@ -5,8 +5,6 @@ import multiprocessing
 from multiprocessing import Pipe, Lock
 import multiprocessing.pool
 
-# 9 (buffalo, parafižnik, pršut) 6(panceta čebula)
-
 ADJ_MATRIX_FILE = 'graph1.txt'
 
 class NoDaemonProcess(multiprocessing.Process):
@@ -27,10 +25,11 @@ class NestablePool(multiprocessing.pool.Pool):
 class Graph:
     def __init__(self, adj_mat):
         self.adj_mat = adj_mat
-        self.create_nodes(self.calc_degrees())
+        self.create_nodes()
         self.connect_nodes()
 
-    def create_nodes(self, degrees):
+    def create_nodes(self):
+        degrees = self.calc_degrees()
         node_ids = set([i for i in range(len(self.adj_mat[0]))])
         self.V = [Node(i, degrees[i]) for i in node_ids]
 
@@ -93,24 +92,21 @@ class Node:
 
     def delete_neighbour(self, neighbour_to_del):
         if neighbour_to_del[1] == True:
-            return self.unset_neighbour(neighbour_to_del[0])
+            self.unset_neighbour(neighbour_to_del[0])
 
 
 def work(node):
     node.selected = random.random() < 1 / (2 *  node.degree)
-    if node.id == 0: print('trying to compete(' + str(compete_for_MIS) + '): ' + str(1 / (2 *  node.degree)))
     node.inform_neighbours((node.selected, node.degree))
-    competing_neighbours = [msg for msg in node.check_for_messages() if msg[1][0] == True]
-    if node.id == 0: print(competing_neighbours)
+    competing_neighbours = list(filter(lambda msg: msg[1][0] == True, node.check_for_messages()))
     winner = find_MIS_node(node, competing_neighbours)
-
-    if node.id == 0: print(competing_neighbours)
-    if node.id == 0: print(max_degree_competitors)
-    
-    
-    if winner == node.id:
-        print(str(node.id) + ' won!')
-        node.delete_neighbours(messages)
+    node.MIS = winner == node.id
+    node.inform_neighbours(winner == node.id)
+    neighbours_won = list(filter(lambda msg: msg[1] == True, node.check_for_messages()))
+    remove_self_from_graph = winner == node.id or len(neighbours_won) > 0
+    node.inform_neighbours(remove_self_from_graph)
+    node.delete_neighbours(node.check_for_messages())
+    if remove_self_from_graph:
         return node.MIS
     return work(node)
 
@@ -147,7 +143,6 @@ def better(competitor, current_best):
         else:
             return competitor
 
-
 def string_to_matrix(source):
     lines = source.split('\n')
     return [list(map(int, line.split(','))) for line in lines]
@@ -161,12 +156,10 @@ def get_adj_matrix():
     return string_to_matrix(s)
 
 def preporcess():
-    graph = Graph(get_adj_matrix())
-    return graph
+    return Graph(get_adj_matrix())
 
 def lubyMIS(graph):
     return NestablePool().map(work, graph.V)
-
 
 def main():
     print("Preprocessing...")
@@ -181,8 +174,5 @@ def main():
     print("--- Total execution: %s seconds ---" % (end_time - start_time))
     print("Result: " + str(result))
 
-
 if __name__ == "__main__":
     main()
-
-
