@@ -5,8 +5,7 @@ import multiprocessing
 from multiprocessing import Pipe, Lock
 import multiprocessing.pool
 
-ADJ_MATRIX_FILE = 'graph1.txt'
-
+ADJ_MATRIX_FILE = 'graph4.txt'
 class NoDaemonProcess(multiprocessing.Process):
     @property
     def daemon(self):
@@ -70,18 +69,18 @@ class Node:
 
     def connect(self, node):
         conn1, conn2 = Pipe()
-        if node.set_neighbour(self.id, conn2):
-            self.set_neighbour(node.id, conn1)
+        if node.set_neighbour(self.id, conn1):
+            self.set_neighbour(node.id, conn2)
 
     def inform_neighbours(self, msg):
-        packages = [(key, msg) for key in self.neighbours.keys()]
-        multiprocessing.Pool().map(self.inform_neighbour, packages)
+        for neighbour_id in self.neighbours.keys():
+            self.inform_neighbour((neighbour_id, msg))
 
     def inform_neighbour(self, payload):
-        return self.neighbours.get(payload[0]).send((self.id, payload[1]))
+        self.neighbours.get(payload[0]).send((self.id, payload[1]))
 
     def check_for_messages(self):
-        return multiprocessing.Pool().map(self.check_neighbour_message, self.neighbours.keys())
+        return list(map(self.check_neighbour_message, self.neighbours.keys()))
 
     def check_neighbour_message(self, neighbour_id):
         return self.neighbours.get(neighbour_id).recv()
@@ -96,19 +95,48 @@ class Node:
 
 
 def work(node):
+    if isinstance(node, bool):
+        return node
     node.selected = random.random() < 1 / (2 *  node.degree)
     node.inform_neighbours((node.selected, node.degree))
+    return node
+    
+def work1(node):
+    if isinstance(node, bool):
+        return node
     competing_neighbours = list(filter(lambda msg: msg[1][0] == True, node.check_for_messages()))
     winner = find_MIS_node(node, competing_neighbours)
     node.MIS = winner == node.id
-    node.inform_neighbours(winner == node.id)
+    if node.MIS:
+        print('\tNode ' + str(node.id) + ' is part of MIS.')
+    return node
+
+def work2(node):
+    if isinstance(node, bool):
+        return node
+    node.inform_neighbours(node.MIS)
+    return node
+
+def work3(node):
+    if isinstance(node, bool):
+        return node
     neighbours_won = list(filter(lambda msg: msg[1] == True, node.check_for_messages()))
-    remove_self_from_graph = winner == node.id or len(neighbours_won) > 0
-    node.inform_neighbours(remove_self_from_graph)
+    node.used = node.MIS or len(neighbours_won) > 0
+    return node
+    
+def work4(node):
+    if isinstance(node, bool):
+        return node
+    node.inform_neighbours(node.used)
+    return node
+
+def work5(node):
+    if isinstance(node, bool):
+        return node
     node.delete_neighbours(node.check_for_messages())
-    if remove_self_from_graph:
+    if node.used:
         return node.MIS
-    return work(node)
+    return node
 
 def find_MIS_node(node, competing_neighbours):
     best_neighbour = find_best_neighbour(competing_neighbours)
@@ -159,9 +187,21 @@ def preporcess():
     return Graph(get_adj_matrix())
 
 def lubyMIS(graph):
-    return NestablePool().map(work, graph.V)
+    t = time.time()
+    pool = NestablePool()
+    graph.V = pool.map(work,  graph.V)
+    graph.V = pool.map(work1, graph.V)
+    graph.V = pool.map(work2, graph.V)
+    graph.V = pool.map(work3, graph.V)
+    graph.V = pool.map(work4, graph.V)
+    graph.V = pool.map(work5, graph.V)
+    if all(isinstance(x, bool) for x in graph.V):
+        return graph.V
+    else:
+        return lubyMIS(graph)
 
 def main():
+    # freeze_support() 
     print("Preprocessing...")
     start_time = time.time()
     graph = preporcess()
