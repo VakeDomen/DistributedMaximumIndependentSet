@@ -1,4 +1,5 @@
 import time
+import random
 import numpy as np
 import multiprocessing
 from multiprocessing import Pipe, Lock
@@ -14,10 +15,8 @@ class NoDaemonProcess(multiprocessing.Process):
     @daemon.setter
     def daemon(self, value):
         pass
-
 class NoDaemonContext(type(multiprocessing.get_context())):
     Process = NoDaemonProcess
-
 class NestablePool(multiprocessing.pool.Pool):
     def __init__(self, *args, **kwargs):
         kwargs['context'] = NoDaemonContext()
@@ -35,10 +34,10 @@ class Graph:
 
     def calc_degrees(self):
         return multiprocessing.Pool().map(self.calc_degree, range(len(self.adj_mat[0])))
-
+    
     def calc_degree(self, vertex):
         return sum(self.adj_mat[vertex])
-
+    
     def connect_nodes(self):
         for i in range(len(self.adj_mat[0])):
             self.connect_node(self.V[i])
@@ -74,7 +73,7 @@ class Node:
         multiprocessing.Pool().map(self.inform_neighbour, packages)
 
     def inform_neighbour(self, payload):
-        self.neighbours.get(payload[0]).send((self.id, payload[1]))
+        return self.neighbours.get(payload[0]).send((self.id, payload[1]))
 
     def check_for_messages(self):
         return multiprocessing.Pool().map(self.check_neighbour_message, self.neighbours.keys())
@@ -82,11 +81,28 @@ class Node:
     def check_neighbour_message(self, neighbour_id):
         return self.neighbours.get(neighbour_id).recv()
 
+    def delete_neighbours(self, neighbours_to_del):
+        neighbours = multiprocessing.Pool().map(self.delete_neighbour, neighbours_to_del)
+        self.neighbours = dict([n for n in neighbours if n] )
+
+    def delete_neighbour(self, neighbour_to_del):
+        if neighbour_to_del[1] == True:
+            return None
+        return (neighbour_to_del[0], self.neighbours[neighbour_to_del[0]])
+
+
 def work(node):
-    node.inform_neighbours("blabla message")
+    should_delete = random.randint(1,100) < 50
+    node.inform_neighbours(should_delete)
     messages = node.check_for_messages()
-    print('me: ' + str(node.id) + ' | messages: ' + str(messages))
-    return node.id
+    node.delete_neighbours(messages)
+    
+    
+    if should_delete:
+        return node.MIS
+    return work(node)
+        
+
 
 def string_to_matrix(source):
     lines = source.split('\n')
@@ -101,10 +117,12 @@ def get_adj_matrix():
     return string_to_matrix(s)
 
 def preporcess():
-    return Graph(get_adj_matrix())
+    graph = Graph(get_adj_matrix())
+    return graph
 
 def slowMIS(graph):
     return NestablePool().map(work, graph.V)
+
 
 def main():
     print("Preprocessing...")
