@@ -5,6 +5,8 @@ import multiprocessing
 from multiprocessing import Pipe, Lock
 import multiprocessing.pool
 
+# 9 (buffalo, parafižnik, pršut) 6(panceta čebula)
+
 ADJ_MATRIX_FILE = 'graph1.txt'
 
 class NoDaemonProcess(multiprocessing.Process):
@@ -54,7 +56,7 @@ class Node:
         self.MIS = False
         self.used = False
         self.selected = False
-        self.degree = degree
+        self.degree = degree + 1
         self.neighbours = {}
 
     def set_neighbour(self, neighbour_id, pipe):
@@ -95,16 +97,55 @@ class Node:
 
 
 def work(node):
-    should_delete = random.randint(1,100) < 50
-    node.inform_neighbours(should_delete)
-    messages = node.check_for_messages()
-    node.delete_neighbours(messages)
+    node.selected = random.random() < 1 / (2 *  node.degree)
+    if node.id == 0: print('trying to compete(' + str(compete_for_MIS) + '): ' + str(1 / (2 *  node.degree)))
+    node.inform_neighbours((node.selected, node.degree))
+    competing_neighbours = [msg for msg in node.check_for_messages() if msg[1][0] == True]
+    if node.id == 0: print(competing_neighbours)
+    winner = find_MIS_node(node, competing_neighbours)
+
+    if node.id == 0: print(competing_neighbours)
+    if node.id == 0: print(max_degree_competitors)
     
     
-    if should_delete:
+    if winner == node.id:
+        print(str(node.id) + ' won!')
+        node.delete_neighbours(messages)
         return node.MIS
     return work(node)
-        
+
+def find_MIS_node(node, competing_neighbours):
+    best_neighbour = find_best_neighbour(competing_neighbours)
+    if not node.selected and best_neighbour == None:
+        return None
+    elif not node.selected:
+        return best_neighbour[0]
+    elif node.selected and best_neighbour == None:
+        return node.id
+    else:
+        if best_neighbour[0] < node.id:
+            return best_neighbour[0]
+        else:
+            return node.id
+
+def find_best_neighbour(competitors):
+    best_neighbour = None
+    for competitor in competitors:
+        best_neighbour = better(competitor, best_neighbour)
+    return best_neighbour
+
+def better(competitor, current_best):
+    if current_best == None:
+        return competitor
+    if competitor[1][1] < current_best[1][1]:
+        return current_best
+    elif competitor[1][1] > current_best[1][1]:
+        return competitor
+    else:
+        if competitor[0] < current_best[0]:
+            return current_best
+        else:
+            return competitor
 
 
 def string_to_matrix(source):
@@ -123,7 +164,7 @@ def preporcess():
     graph = Graph(get_adj_matrix())
     return graph
 
-def slowMIS(graph):
+def lubyMIS(graph):
     return NestablePool().map(work, graph.V)
 
 
@@ -134,7 +175,7 @@ def main():
     mid_time = time.time()
     print("Preprocessing finished in %s seconds!" % (mid_time - start_time))
     print("Calculating MIS...")
-    result = slowMIS(graph)
+    result = lubyMIS(graph)
     end_time = time.time()
     print("Calculating MIS finished in %s seconds!" % (end_time - mid_time))
     print("--- Total execution: %s seconds ---" % (end_time - start_time))
