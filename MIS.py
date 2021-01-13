@@ -93,15 +93,14 @@ class Node:
         if neighbour_to_del[1] == True:
             self.unset_neighbour(neighbour_to_del[0])
 
-
-def work(node):
+def select_and_inform_neighbours(node):
     if isinstance(node, bool):
         return node
     node.selected = random.random() < 1 / (2 *  node.degree)
     node.inform_neighbours((node.selected, node.degree))
     return node
     
-def work1(node):
+def recieve_messages_and_calc_winner(node):
     if isinstance(node, bool):
         return node
     competing_neighbours = list(filter(lambda msg: msg[1][0] == True, node.check_for_messages()))
@@ -111,26 +110,26 @@ def work1(node):
         print('\tNode ' + str(node.id) + ' is part of MIS.')
     return node
 
-def work2(node):
+def inform_neighbours_of_victor(node):
     if isinstance(node, bool):
         return node
     node.inform_neighbours(node.MIS)
     return node
 
-def work3(node):
+def determine_removal(node):
     if isinstance(node, bool):
         return node
     neighbours_won = list(filter(lambda msg: msg[1] == True, node.check_for_messages()))
     node.used = node.MIS or len(neighbours_won) > 0
     return node
     
-def work4(node):
+def inform_removal(node):
     if isinstance(node, bool):
         return node
     node.inform_neighbours(node.used)
     return node
 
-def work5(node):
+def remove_winners_and_neighbours(node):
     if isinstance(node, bool):
         return node
     node.delete_neighbours(node.check_for_messages())
@@ -186,31 +185,34 @@ def get_adj_matrix():
 def preporcess():
     return Graph(get_adj_matrix())
 
-def lubyMIS(graph):
-    t = time.time()
-    pool = NestablePool()
-    graph.V = pool.map(work,  graph.V)
-    graph.V = pool.map(work1, graph.V)
-    graph.V = pool.map(work2, graph.V)
-    graph.V = pool.map(work3, graph.V)
-    graph.V = pool.map(work4, graph.V)
-    graph.V = pool.map(work5, graph.V)
+def lubyMIS(graph, pool):
+    graph.V = pool.map( select_and_inform_neighbours,        graph.V)
+    graph.V = pool.map( recieve_messages_and_calc_winner,    graph.V)
+    graph.V = pool.map( inform_neighbours_of_victor,         graph.V)
+    graph.V = pool.map( determine_removal,                   graph.V)
+    graph.V = pool.map( inform_removal,                      graph.V)
+    graph.V = pool.map( remove_winners_and_neighbours,       graph.V)
     if all(isinstance(x, bool) for x in graph.V):
         return graph.V
     else:
-        return lubyMIS(graph)
+        return lubyMIS(graph, pool)
 
 def main():
-    # freeze_support() 
+    # FAZA 1:
     print("Preprocessing...")
     start_time = time.time()
     graph = preporcess()
+    pool = NestablePool()
     mid_time = time.time()
     print("Preprocessing finished in %s seconds!" % (mid_time - start_time))
+
+    # FAZA 2:
     print("Calculating MIS...")
-    result = lubyMIS(graph)
+    result = lubyMIS(graph, pool)
     end_time = time.time()
     print("Calculating MIS finished in %s seconds!" % (end_time - mid_time))
+
+
     print("--- Total execution: %s seconds ---" % (end_time - start_time))
     print("Result: " + str(result))
 

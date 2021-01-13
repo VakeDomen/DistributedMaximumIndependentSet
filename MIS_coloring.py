@@ -6,7 +6,6 @@ from multiprocessing import Pipe, Lock
 import multiprocessing.pool
 
 ADJ_MATRIX_FILE = 'graph4.txt'
-colors = []
 
 class NoDaemonProcess(multiprocessing.Process):
     @property
